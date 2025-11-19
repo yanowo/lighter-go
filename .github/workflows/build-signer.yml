@@ -1,0 +1,82 @@
+name: Build signer shared libs
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+jobs:
+  build-signer:
+    name: Build ${{ matrix.name }}
+    strategy:
+      matrix:
+        include:
+          - name: windows-amd64
+            os: windows-latest
+            goos: windows
+            goarch: amd64
+            out: signer-amd64.dll
+          - name: linux-amd64
+            os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            out: signer-amd64.so
+          - name: macos-arm64
+            os: macos-14   # Apple Silicon runner
+            goos: darwin
+            goarch: arm64
+            out: signer-arm64.dylib
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build shared library
+        working-directory: ./sharedlib
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          echo "Building for $GOOS/$GOARCH -> ${{ matrix.out }}"
+          go build -buildmode=c-shared -o ${{ matrix.out }} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: sharedlib/${{ matrix.out }}
+
+  release:
+    name: Create GitHub Release
+    needs: build-signer
+    runs-on: ubuntu-latest
+    # 只有 tag push 時才跑這個 job
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: List downloaded files
+        run: ls -R dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/signer-amd64.dll/signer-amd64.dll
+            dist/signer-amd64.so/signer-amd64.so
+            dist/signer-arm64.dylib/signer-arm64.dylib
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
