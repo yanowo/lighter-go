@@ -20,6 +20,8 @@ var (
 		MaxIdleConnsPerHost: 100,
 		IdleConnTimeout:     10 * time.Second,
 		TLSClientConfig:     &tls.Config{InsecureSkipVerify: false},
+		Proxy:               http.ProxyFromEnvironment,
+		
 	}
 
 	httpClient = &http.Client{
