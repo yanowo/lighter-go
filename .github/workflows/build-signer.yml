@@ -3,7 +3,6 @@ name: Build signer shared libs
 on:
   push:
     branches: [ main ]
-    tags: [ "v*" ]
   workflow_dispatch:
 
 jobs:
@@ -12,21 +11,33 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: windows-amd64
-            os: windows-latest
-            goos: windows
-            goarch: amd64
-            out: signer-amd64.dll
           - name: linux-amd64
             os: ubuntu-latest
             goos: linux
             goarch: amd64
-            out: signer-amd64.so
-          - name: macos-arm64
-            os: macos-14   # Apple Silicon runner
+            out_lib: lighter-signer-linux-amd64.so
+            out_header: lighter-signer-linux-amd64.h
+
+          - name: linux-arm64
+            os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            out_lib: lighter-signer-linux-arm64.so
+            out_header: lighter-signer-linux-arm64.h
+
+          - name: darwin-arm64
+            os: macos-14
             goos: darwin
             goarch: arm64
-            out: signer-arm64.dylib
+            out_lib: lighter-signer-darwin-arm64.dylib
+            out_header: lighter-signer-darwin-arm64.h
+
+          - name: windows-amd64
+            os: windows-latest
+            goos: windows
+            goarch: amd64
+            out_lib: lighter-signer-windows-amd64.dll
+            out_header: lighter-signer-windows-amd64.h
 
     runs-on: ${{ matrix.os }}
 
@@ -46,21 +57,23 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          echo "Building for $GOOS/$GOARCH -> ${{ matrix.out }}"
-          go build -buildmode=c-shared -o ${{ matrix.out }} .
+          echo "Building for $GOOS/$GOARCH -> ${{ matrix.out_lib }}"
+          go build -buildmode=c-shared -o ${{ matrix.out_lib }} .
+          # Go 會自動產出同名 .h，例如 lighter-signer-xxx.h
+          ls -l ${{ matrix.out_lib }} ${{ matrix.out_header }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.out }}
-          path: sharedlib/${{ matrix.out }}
+          name: ${{ matrix.name }}
+          path: |
+            sharedlib/${{ matrix.out_lib }}
+            sharedlib/${{ matrix.out_header }}
 
   release:
-    name: Create GitHub Release
+    name: Create Draft Release
     needs: build-signer
     runs-on: ubuntu-latest
-    # 只有 tag push 時才跑這個 job
-    if: startsWith(github.ref, 'refs/tags/')
 
     steps:
       - name: Download artifacts
@@ -71,12 +84,19 @@ jobs:
       - name: List downloaded files
         run: ls -R dist
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (Draft)
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
+          generate_release_notes: true
           files: |
-            dist/signer-amd64.dll/signer-amd64.dll
-            dist/signer-amd64.so/signer-amd64.so
-            dist/signer-arm64.dylib/signer-arm64.dylib
+            dist/linux-amd64/lighter-signer-linux-amd64.so
+            dist/linux-amd64/lighter-signer-linux-amd64.h
+            dist/linux-arm64/lighter-signer-linux-arm64.so
+            dist/linux-arm64/lighter-signer-linux-arm64.h
+            dist/darwin-arm64/lighter-signer-darwin-arm64.dylib
+            dist/darwin-arm64/lighter-signer-darwin-arm64.h
+            dist/windows-amd64/lighter-signer-windows-amd64.dll
+            dist/windows-amd64/lighter-signer-windows-amd64.h
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
