@@ -16,17 +16,22 @@ jobs:
             os: windows-latest
             goos: windows
             goarch: amd64
-            out: signer-amd64.dll
+            ext: dll
           - name: linux-amd64
             os: ubuntu-latest
             goos: linux
             goarch: amd64
-            out: signer-amd64.so
-          - name: macos-arm64
+            ext: so
+          - name: linux-arm64
+            os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            ext: so
+          - name: darwin-arm64
             os: macos-14   # Apple Silicon runner
             goos: darwin
             goarch: arm64
-            out: signer-arm64.dylib
+            ext: dylib
 
     runs-on: ${{ matrix.os }}
 
@@ -46,14 +51,18 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          echo "Building for $GOOS/$GOARCH -> ${{ matrix.out }}"
-          go build -buildmode=c-shared -o ${{ matrix.out }} .
+          OUTPUT="lighter-signer-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.ext }}"
+          echo "Building for $GOOS/$GOARCH -> $OUTPUT"
+          go build -buildmode=c-shared -o $OUTPUT .
+          ls -lh lighter-signer-*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.out }}
-          path: sharedlib/${{ matrix.out }}
+          name: lighter-signer-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            sharedlib/lighter-signer-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.ext }}
+            sharedlib/lighter-signer-${{ matrix.goos }}-${{ matrix.goarch }}.h
 
   release:
     name: Create GitHub Release
@@ -75,8 +84,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/signer-amd64.dll/signer-amd64.dll
-            dist/signer-amd64.so/signer-amd64.so
-            dist/signer-arm64.dylib/signer-arm64.dylib
+            dist/lighter-signer-windows-amd64/lighter-signer-windows-amd64.dll
+            dist/lighter-signer-windows-amd64/lighter-signer-windows-amd64.h
+            dist/lighter-signer-linux-amd64/lighter-signer-linux-amd64.so
+            dist/lighter-signer-linux-amd64/lighter-signer-linux-amd64.h
+            dist/lighter-signer-linux-arm64/lighter-signer-linux-arm64.so
+            dist/lighter-signer-linux-arm64/lighter-signer-linux-arm64.h
+            dist/lighter-signer-darwin-arm64/lighter-signer-darwin-arm64.dylib
+            dist/lighter-signer-darwin-arm64/lighter-signer-darwin-arm64.h
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
